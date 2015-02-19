@@ -11,7 +11,8 @@
                  [danlentz/clj-uuid "0.1.2-SNAPSHOT"]
                 ]
                 
-  :jvm-opts ["-server"
+  :jvm-opts [;;"-server"
+             "-zero"
              "-Xmx256m"
              "-Dlog4j.configuration=log4j.properties.unit"]
   ;;:global-vars {*warn-on-reflection* true}
