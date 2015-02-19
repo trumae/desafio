@@ -1,6 +1,7 @@
 (ns desafio.core
   (:require [clojurewerkz.cassaforte.client :as cas]
             [clojurewerkz.cassaforte.cql :as cql]
+            [clojurewerkz.cassaforte.query :as casq]
             [clojurewerkz.elastisch.rest :as esr]
             [clojurewerkz.elastisch.rest.index :as esi]
             [clojurewerkz.elastisch.query :as q]
@@ -23,6 +24,18 @@
                                   :sync  {:type "boolean" :default false}
                                   :created_at {:type "date" :format "date_hour_minute_second"}}}})
 
+
+(def ^{:const true} keyspace-name "desafio")
+
+(def ^{:const true} casdefinitions
+  (casq/column-definitions {:id :UUID
+                            :timeline :varchar
+                            :text  :varchar
+                            :created_at :timestamp
+                            :sync :boolean
+                            :primary-key [:id]}))
+
+
 ;; Elasticsearch
 
 (defn esCreateIndexDesafio [esconn]
@@ -31,18 +44,18 @@
 (defn esDeleteIndexDesafio[esconn]
   (esi/delete esconn index-name))
 
-(defn putRandomTweets [esconn n]
+(defn esPutRandomTweets [esconn n]
   (if (pos? n)
     (do
       (esd/put esconn index-name index-type (str (UUID/randomUUID)) {:timeline "vvmaciel"
-                                                                     :text (str "texto " n)
+                                                                     :text (str "texto orig es " n)
                                                                      :sync false})
       (recur esconn (dec n)))))
 
-(defn countTweets [esconn]
+(defn esCountTweets [esconn]
   (:count (esd/count esconn index-name index-type)))
 
-(defn deleteAllTweets[esconn]
+(defn esDeleteAllTweets[esconn]
   (esd/delete-by-query esconn index-name index-type (q/match-all)))
 
 (defn fetch-scroll-results [conn scroll-id results]
@@ -52,7 +65,7 @@
       (recur conn (:_scroll_id scroll-response) (concat results hits))
       (concat results hits))))
 
-(defn getNotSyncTweets [esconn]
+(defn esGetNotSyncTweets [esconn]
   (let [response     (esd/search esconn index-name index-type
                                  :query (q/term :sync false)
                                  :search_type "query_then_fetch"
@@ -63,19 +76,73 @@
         all-hits     (fetch-scroll-results esconn scroll-id initial-hits)]
     all-hits))
 
-
+(defn es2cas [esconn casconn hits]
+  (if (empty? hits)
+    nil
+    (let [hit (first hits)]
+      ;;process hit
+      (println hit)
+      (recur esconn casconn (rest hits)))))
+      
 
 (defn elasticsearch2cassandra [esconn casconn]
-  (let [hits (getNotSyncTweets esconn)]
+  (let [hits (esGetNotSyncTweets esconn)]
     (es2cas esconn casconn hits)))
+
+
 ;; Cassandra
+(defn casCreateKeyspaceDesafio [casconn]
+  (cql/create-keyspace  casconn
+                        keyspace-name
+                        (casq/with {:replication
+                                    {:class "SimpleStrategy"
+                                     :replication_factor 2 }})))
+
+(defn casCreateTableTweet [casconn]
+  (cql/use-keyspace casconn keyspace-name)
+  (cql/create-table casconn "tweet" casdefinitions)
+  (cql/create-index casconn "tweet" "sync")
+  (cql/create-index casconn "tweet" "created_at"))
+
+(defn casDropTableTweet [casconn]
+  (cql/use-keyspace casconn keyspace-name)
+  (cql/drop-table casconn "tweet"))
 
 
+(defn casDeleteKeyspaceDesafio [casconn]
+  (cql/drop-keyspace casconn keyspace-name))
+
+
+(defn casPutRandomTweets [casconn n]
+  (if (pos? n)
+    (do
+      (cql/insert casconn "tweet" {:timeline "vvmaciel"
+                                   :text (str "texto orig cas" n)
+                                   :sync false :id (UUID/randomUUID)
+                                   :created_at (.getTime (java.util.Date.))})
+      (recur casconn (dec n)))))
+
+(defn casGetNotSyncTweets [casconn]
+  (cql/select casconn "tweet" (casq/where {:sync false})))
+
+(defn cas2es [esconn casconn hits]
+  (if (empty? hits)
+    nil
+    (let [hit (first hits)]
+      ;;process hit
+      (println hit)
+      (recur esconn casconn (rest hits)))))
+
+(defn cassandra2elasticsearch [esconn casconn]
+  (let [hits (casGetNotSyncTweets casconn)]
+    (cas2es esconn casconn hits)))
 
 ;; Enable command-line invocation
 (defn -main [& args]
   (let [esconn (esr/connect "http://127.0.0.1:9200")
-        casconn (cas/connect ["127.0.0.1"])]  
-    (println "Alo Desafio")))
+        casconn (cas/connect ["127.0.0.1"])]
+    (cql/use-keyspace casconn keyspace-name)
+    (cassandra2elasticsearch esconn casconn)
+    (elasticsearch2cassandra esconn casconn)))
 
 
