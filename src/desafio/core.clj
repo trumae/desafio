@@ -169,13 +169,31 @@
     (let [hit (first hits)]
       ;;process hit
       (println hit)
+      (let [res (esd/get esconn index-name index-type (str (:id hit)))]
+        (if (nil? res)
+          (let ;; put new es entry and update cas
+              [timeline (:timeline hit)
+               id (:id hit)
+               str-id (str (:id hit))
+               created (:created_at hit)
+               text (:text hit)]
+            (esd/put esconn index-name index-type str-id {:timeline timeline
+                                                          :text text
+                                                          :created_at (.getTime (java.util.Date.))
+                                                          :sync true})
+            (cql/update casconn "tweet"
+                        {:timeline timeline
+                         :text text
+                         :sync true
+                         :created_at created}
+                        (casq/where {:id id})))
+          (do ;; update entry
+            )))
       (recur esconn casconn (rest hits)))))
 
 (defn cassandra2elasticsearch [esconn casconn]
   (let [hits (casGetNotSyncTweets casconn)]
     (cas2es esconn casconn hits)))
-
-
 
 ;;; tests helpers
 
@@ -185,10 +203,10 @@
   (casDropTableTweet casconn)
   (casCreateTableTweet casconn))
 
-(defn data10es3cas [esconn casconn]
+(defn data3es2cas [esconn casconn]
   (resetDBs esconn casconn)
-  (esPutRandomTweets esconn 10)
-  (casPutRandomTweets casconn 3))
+  (esPutRandomTweets esconn 3)
+  (casPutRandomTweets casconn 2))
 
 ;; Enable command-line invocation
 (defn -main [& args]
