@@ -35,8 +35,9 @@
                             :sync :boolean
                             :primary-key [:id]}))
 
-
-;; Elasticsearch
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;              Elasticsearch
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn esCreateIndexDesafio [esconn]
   (esi/create esconn index-name :mappings mapping-types :settings {"number_of_shards" 1}))
@@ -49,6 +50,7 @@
     (do
       (esd/put esconn index-name index-type (str (UUID/randomUUID)) {:timeline "vvmaciel"
                                                                      :text (str "texto orig es " n)
+                                                                     :created_at (.getTime (java.util.Date.))
                                                                      :sync false})
       (recur esconn (dec n)))))
 
@@ -82,6 +84,41 @@
     (let [hit (first hits)]
       ;;process hit
       (println hit)
+      (let [res (cql/select casconn "tweet" (casq/where {:id (UUID/fromString (:_id hit))}))]
+        (if (empty? res)
+          (do ;; put new cas entry and update es
+            (println "new entry on cassandra and update elasticsearch")
+            (cql/insert casconn "tweet" {:timeline (:timeline (:_source hit))
+                                         :text (:text (:_source hit))
+                                         :sync true
+                                         :id (UUID/fromString (:_id hit))
+                                         :created_at (:created_at (:_source hit))})
+            (esd/update-with-partial-doc esconn index-name index-type (:_id hit) {:sync true}))
+          (let ;; update entry
+              [tes (:created_at (:_source (esGetNotSyncTweets esconn)))
+               tcas (.getTime (:created_at (first res)))]
+            (println "what the newest?" )
+            (if (<= tes tcas)
+              (do ;; upgrade cas and es using cas
+                (esd/update-with-partial-doc esconn index-name index-type (:_id hit)
+                                             {:sync true
+                                              :text (:text (first res))
+                                              :timeline (:timeline (first res))})
+                (cql/update casconn "tweet"
+                            {:sync true                             
+                             :created_at (:created_at (:_source hit))}
+                            (casq/where {:id (UUID/fromString (:_id hit))})))
+            (do ;; upgrade cas and es using es
+              (esd/update-with-partial-doc esconn index-name index-type (:_id hit) {:sync true})
+              (cql/update casconn "tweet"
+                          {:timeline (:timeline (:_source hit))
+                           :text (:text (:_source hit))
+                           :sync true
+                           :id (UUID/fromString (:_id hit))
+                           :created_at (:created_at (:_source hit))}
+                          (casq/where {:id (UUID/fromString (:_id hit))})))))))
+      
+      
       (recur esconn casconn (rest hits)))))
       
 
@@ -89,8 +126,10 @@
   (let [hits (esGetNotSyncTweets esconn)]
     (es2cas esconn casconn hits)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;                Cassandra
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Cassandra
 (defn casCreateKeyspaceDesafio [casconn]
   (cql/create-keyspace  casconn
                         keyspace-name
@@ -107,7 +146,6 @@
 (defn casDropTableTweet [casconn]
   (cql/use-keyspace casconn keyspace-name)
   (cql/drop-table casconn "tweet"))
-
 
 (defn casDeleteKeyspaceDesafio [casconn]
   (cql/drop-keyspace casconn keyspace-name))
@@ -136,6 +174,21 @@
 (defn cassandra2elasticsearch [esconn casconn]
   (let [hits (casGetNotSyncTweets casconn)]
     (cas2es esconn casconn hits)))
+
+
+
+;;; tests helpers
+
+(defn resetDBs [esconn casconn]
+  (esDeleteIndexDesafio esconn)
+  (esCreateIndexDesafio esconn)
+  (casDropTableTweet casconn)
+  (casCreateTableTweet casconn))
+
+(defn data10es3cas [esconn casconn]
+  (resetDBs esconn casconn)
+  (esPutRandomTweets esconn 10)
+  (casPutRandomTweets casconn 3))
 
 ;; Enable command-line invocation
 (defn -main [& args]
