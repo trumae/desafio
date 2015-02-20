@@ -39,26 +39,6 @@
 ;;              Elasticsearch
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn esCreateIndexDesafio [esconn]
-  (esi/create esconn index-name :mappings mapping-types :settings {"number_of_shards" 1}))
-
-(defn esDeleteIndexDesafio[esconn]
-  (esi/delete esconn index-name))
-
-(defn esPutRandomTweets [esconn n]
-  (if (pos? n)
-    (do
-      (esd/put esconn index-name index-type (str (UUID/randomUUID)) {:timeline "vvmaciel"
-                                                                     :text (str "texto orig es " n)
-                                                                     :created_at (.getTime (java.util.Date.))
-                                                                     :sync false})
-      (recur esconn (dec n)))))
-
-(defn esCountTweets [esconn]
-  (:count (esd/count esconn index-name index-type)))
-
-(defn esDeleteAllTweets[esconn]
-  (esd/delete-by-query esconn index-name index-type (q/match-all)))
 
 (defn fetch-scroll-results [conn scroll-id results]
   (let [scroll-response (esd/scroll conn scroll-id :scroll "1m")
@@ -130,38 +110,6 @@
 ;;                Cassandra
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn casCreateKeyspaceDesafio [casconn]
-  (cql/create-keyspace  casconn
-                        keyspace-name
-                        (casq/with {:replication
-                                    {:class "SimpleStrategy"
-                                     :replication_factor 2 }})))
-
-(defn casCreateTableTweet [casconn]
-  (cql/use-keyspace casconn keyspace-name)
-  (cql/create-table casconn "tweet" casdefinitions)
-  (cql/create-index casconn "tweet" "sync")
-  (cql/create-index casconn "tweet" "created_at"))
-
-(defn casDropTableTweet [casconn]
-  (cql/use-keyspace casconn keyspace-name)
-  (cql/drop-table casconn "tweet"))
-
-(defn casDeleteKeyspaceDesafio [casconn]
-  (cql/drop-keyspace casconn keyspace-name))
-
-(defn casPutRandomTweets [casconn n]
-  (if (pos? n)
-    (do
-      (cql/insert casconn "tweet" {:timeline "vvmaciel"
-                                   :text (str "texto orig cas" n)
-                                   :sync false :id (UUID/randomUUID)
-                                   :created_at (.getTime (java.util.Date.))})
-      (recur casconn (dec n)))))
-
-(defn casCountTweets [casconn]
-  (count (cql/select casconn "tweet")))
-
 (defn casGetNotSyncTweets [casconn]
   (cql/select casconn "tweet" (casq/where {:sync false})))
 
@@ -196,19 +144,6 @@
 (defn cassandra2elasticsearch [esconn casconn]
   (let [hits (casGetNotSyncTweets casconn)]
     (cas2es esconn casconn hits)))
-
-;;; tests helpers
-
-(defn resetDBs [esconn casconn]
-  (esDeleteIndexDesafio esconn)
-  (esCreateIndexDesafio esconn)
-  (casDropTableTweet casconn)
-  (casCreateTableTweet casconn))
-
-(defn data3es2cas [esconn casconn]
-  (resetDBs esconn casconn)
-  (esPutRandomTweets esconn 3)
-  (casPutRandomTweets casconn 2))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
