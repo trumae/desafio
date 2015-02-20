@@ -1,20 +1,20 @@
 box: wercker/default
 services:
-	- wercker/redis
+  - wercker/redis
 build:
-	steps:
-		- script:
-		  name: install clojure
-		  code: |		  
-		  	sudo apt-get update
-			sudo apt-get install openjdk-7-jdk curl -y
-			sudo wget -O /usr/local/bin/lein https://raw.github.com/technomancy/leiningen/stable/bin/lein
-			sudo chmod +x /usr/local/bin/lein
-		- script:
-		  name: run tests
-		  code: |
-		  	lein test
-		- script:
-		  name: build
-		  code: |
-		  	lein uberjar 
+  steps:
+    - script:
+      name: install clojure
+      code: |		  
+        sudo apt-get update
+	sudo apt-get install openjdk-7-jdk curl -y
+	sudo wget -O /usr/local/bin/lein https://raw.github.com/technomancy/leiningen/stable/bin/lein
+	sudo chmod +x /usr/local/bin/lein
+    - script:
+      name: run tests
+      code: |
+        lein test
+    - script:
+      name: build
+      code: |
+        lein uberjar 
