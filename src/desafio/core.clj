@@ -217,6 +217,7 @@
 (def state (atom {}))
 
 (defn init [args]
+  (swap! state assoc :interval (Integer/parseInt (first args)))
   (swap! state assoc :running true))
 
 (defn start []
@@ -228,7 +229,7 @@
       (cassandra2elasticsearch esconn casconn)
       (println "elasticsearch2cassandra")
       (elasticsearch2cassandra esconn casconn)
-      (Thread/sleep 2000))))
+      (Thread/sleep (:interval @state)))))
 
 (defn stop []
   (swap! state assoc :running false))
@@ -246,7 +247,6 @@
 
 ;; Enable command-line invocation
 (defn -main [& args]
-  (println args)
   (init args)
   (start))
 
