@@ -4,6 +4,9 @@
 pom.xml
 pom.xml.asc
 *.jar
+*.err
+*.log
+*.out
 *.class
 /.lein-*
 /.nrepl-port

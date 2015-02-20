@@ -7,11 +7,11 @@
             [clojurewerkz.elastisch.query :as q]
             [clojurewerkz.elastisch.rest.document :as esd]
             [clojurewerkz.elastisch.rest.response :refer [not-found? hits-from]]
-            [clj-time.core :as clj-time]
-            )
+            [clj-time.core :as clj-time])
+  (:import [org.apache.commons.daemon Daemon DaemonContext])
   (:import java.util.UUID)
-  (:gen-class))
-
+  (:gen-class
+   :implements [org.apache.commons.daemon.Daemon]))
 
 (def ^{:const true} index-name "desafio")
 (def ^{:const true} index-type "tweet")
@@ -210,12 +210,44 @@
   (esPutRandomTweets esconn 3)
   (casPutRandomTweets casconn 2))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;  daemon
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(def state (atom {}))
+
+(defn init [args]
+  (swap! state assoc :running true))
+
+(defn start []
+  (while (:running @state)
+    (let [esconn (esr/connect "http://127.0.0.1:9200")
+          casconn (cas/connect ["127.0.0.1"])]
+      (cql/use-keyspace casconn keyspace-name)
+      (println "cassandra2elasticsearch")
+      (cassandra2elasticsearch esconn casconn)
+      (println "elasticsearch2cassandra")
+      (elasticsearch2cassandra esconn casconn)
+      (Thread/sleep 2000))))
+
+(defn stop []
+  (swap! state assoc :running false))
+
+;; Daemon implementation
+
+(defn -init [this ^DaemonContext context]
+  (init (.getArguments context)))
+
+(defn -start [this]
+  (future (start)))
+
+(defn -stop [this]
+  (stop))
+
 ;; Enable command-line invocation
 (defn -main [& args]
-  (let [esconn (esr/connect "http://127.0.0.1:9200")
-        casconn (cas/connect ["127.0.0.1"])]
-    (cql/use-keyspace casconn keyspace-name)
-    (cassandra2elasticsearch esconn casconn)
-    (elasticsearch2cassandra esconn casconn)))
+  (println args)
+  (init args)
+  (start))
 
 
