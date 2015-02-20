@@ -80,7 +80,6 @@
                     {:timeline (:timeline (:_source es-entry))
                      :text (:text (:_source es-entry))
                      :sync true
-                     :id (UUID/fromString (:_id es-entry))
                      :created_at (:created_at (:_source es-entry))}
                     (casq/where {:id (UUID/fromString (:_id es-entry))}))))))
 

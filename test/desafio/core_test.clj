@@ -150,9 +150,10 @@
 (deftest sync-collision-test-1
   (testing "sync collision tests 1"
     (let [esconn (esr/connect "http://127.0.0.1:9200")
-          casconn (cas/connect ["127.0.0.1"])]
+          casconn (cas/connect ["127.0.0.1"])
+          uuid (UUID/randomUUID)]
       (data3es2cas esconn casconn)
-      (let [uuid (UUID/randomUUID)] ;; putting entry in es and cas with id collision
+      (do ;; putting entry in es and cas with id collision
         (esd/put esconn index-name index-type (str uuid) {:timeline "vvmaciel"
                                                           :text "elasticsearch"
                                                           :created_at (.getTime (java.util.Date.))
@@ -170,5 +171,34 @@
       (cassandra2elasticsearch esconn casconn)
       (Thread/sleep 1000)
       (is (= (esCountTweets esconn) 6))
-      (is (= (casCountTweets casconn) 6)))))
+      (is (= (casCountTweets casconn) 6))
+      (is (= (:text (first (cql/select casconn "tweet" (casq/where {:id uuid})))) "cassandra"))
+      (is (= (:text (:_source (esd/get esconn index-name index-type (str uuid)))) "cassandra")))))
       
+(deftest sync-collision-test-2
+  (testing "sync collision tests 2"
+    (let [esconn (esr/connect "http://127.0.0.1:9200")
+          casconn (cas/connect ["127.0.0.1"])
+          uuid (UUID/randomUUID)]
+      (data3es2cas esconn casconn)
+      (do ;; putting entry in es and cas with id collision
+        (cql/insert casconn "tweet" {:timeline "vvmaciel"
+                                     :text "cassandra"
+                                     :sync false
+                                     :id uuid
+                                     :created_at (.getTime (java.util.Date.))})
+        (Thread/sleep 2000)
+        (esd/put esconn index-name index-type (str uuid) {:timeline "vvmaciel"
+                                                          :text "elasticsearch"
+                                                          :created_at (.getTime (java.util.Date.))
+                                                          :sync false}))
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 4))
+      (is (= (casCountTweets casconn) 3))
+      (elasticsearch2cassandra esconn casconn)
+      (cassandra2elasticsearch esconn casconn)
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 6))
+      (is (= (casCountTweets casconn) 6))
+      (is (= (:text (first (cql/select casconn "tweet" (casq/where {:id uuid})))) "elasticsearch"))
+      (is (= (:text (:_source (esd/get esconn index-name index-type (str uuid)))) "elasticsearch")))))
