@@ -58,6 +58,32 @@
         all-hits     (fetch-scroll-results esconn scroll-id initial-hits)]
     all-hits))
 
+
+(defn update-entry [esconn casconn es-entry cas-entry]
+  (let ;; update entry
+      [tes (:created_at (:_source es-entry))
+       tcas (.getTime (:created_at (first cas-entry)))]
+    (println "what the newest?" )
+    (if (<= tes tcas)
+      (do ;; upgrade cas and es using cas
+        (esd/update-with-partial-doc esconn index-name index-type (:_id es-entry)
+                                     {:sync true
+                                      :text (:text (first cas-entry))
+                                      :timeline (:timeline (first cas-entry))})
+        (cql/update casconn "tweet"
+                    {:sync true                             
+                     :created_at (:created_at (:_source es-entry))}
+                    (casq/where {:id (UUID/fromString (:_id es-entry))})))
+      (do ;; upgrade cas and es using es
+        (esd/update-with-partial-doc esconn index-name index-type (:_id es-entry) {:sync true})
+        (cql/update casconn "tweet"
+                    {:timeline (:timeline (:_source es-entry))
+                     :text (:text (:_source es-entry))
+                     :sync true
+                     :id (UUID/fromString (:_id es-entry))
+                     :created_at (:created_at (:_source es-entry))}
+                    (casq/where {:id (UUID/fromString (:_id es-entry))}))))))
+
 (defn es2cas [esconn casconn hits]
   (if (empty? hits)
     nil
@@ -75,7 +101,7 @@
                                          :created_at (:created_at (:_source hit))})
             (esd/update-with-partial-doc esconn index-name index-type (:_id hit) {:sync true}))
           (let ;; update entry
-              [tes (:created_at (:_source (esGetNotSyncTweets esconn)))
+              [tes (:created_at (:_source hit))
                tcas (.getTime (:created_at (first res)))]
             (println "what the newest?" )
             (if (<= tes tcas)
@@ -88,17 +114,7 @@
                             {:sync true                             
                              :created_at (:created_at (:_source hit))}
                             (casq/where {:id (UUID/fromString (:_id hit))})))
-            (do ;; upgrade cas and es using es
-              (esd/update-with-partial-doc esconn index-name index-type (:_id hit) {:sync true})
-              (cql/update casconn "tweet"
-                          {:timeline (:timeline (:_source hit))
-                           :text (:text (:_source hit))
-                           :sync true
-                           :id (UUID/fromString (:_id hit))
-                           :created_at (:created_at (:_source hit))}
-                          (casq/where {:id (UUID/fromString (:_id hit))})))))))
-      
-      
+              (update-entry esconn casconn hit res)))))
       (recur esconn casconn (rest hits)))))
       
 
@@ -138,8 +154,7 @@
                          :sync true
                          :created_at created}
                         (casq/where {:id id})))
-          (do ;; update entry
-            )))
+          (update-entry esconn casconn res hit)))
       (recur esconn casconn (rest hits)))))
 
 (defn cassandra2elasticsearch [esconn casconn]
