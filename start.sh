@@ -5,4 +5,4 @@
      -errfile "$(pwd)/desafio.err" \
      -debug \
      desafio.core \
-     "arguments" "to" "my-daemon.core"
+     "5000"
