@@ -108,7 +108,41 @@
     (let [esconn (esr/connect "http://127.0.0.1:9200")
           casconn (cas/connect ["127.0.0.1"])]
       (data3es2cas esconn casconn)
-      (Thread/sleep 2000)
+      (Thread/sleep 1000)
       (is (= (esCountTweets esconn) 3))
       (is (= (casCountTweets casconn) 2)))))
 
+
+(deftest simple-sync-test-1
+  (testing "simple sync tests 1"
+    (let [esconn (esr/connect "http://127.0.0.1:9200")
+          casconn (cas/connect ["127.0.0.1"])]
+      (data3es2cas esconn casconn)
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 3))
+      (is (= (casCountTweets casconn) 2))
+      (cassandra2elasticsearch esconn casconn)
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 5))
+      (is (= (casCountTweets casconn) 2))
+      (elasticsearch2cassandra esconn casconn)
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 5))
+      (is (= (casCountTweets casconn) 5)))))
+
+(deftest simple-sync-test-2
+  (testing "simple sync tests 2"
+    (let [esconn (esr/connect "http://127.0.0.1:9200")
+          casconn (cas/connect ["127.0.0.1"])]
+      (data3es2cas esconn casconn)
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 3))
+      (is (= (casCountTweets casconn) 2))
+      (elasticsearch2cassandra esconn casconn)      
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 3))
+      (is (= (casCountTweets casconn) 5))
+      (cassandra2elasticsearch esconn casconn)
+      (Thread/sleep 1000)
+      (is (= (esCountTweets esconn) 5))
+      (is (= (casCountTweets casconn) 5)))))

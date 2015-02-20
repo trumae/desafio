@@ -127,6 +127,7 @@
                str-id (str (:id hit))
                created (:created_at hit)
                text (:text hit)]
+            (println "new entry on elasticsearch and update cassandra")
             (esd/put esconn index-name index-type str-id {:timeline timeline
                                                           :text text
                                                           :created_at (.getTime (java.util.Date.))
