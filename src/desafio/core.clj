@@ -150,7 +150,6 @@
 (defn casDeleteKeyspaceDesafio [casconn]
   (cql/drop-keyspace casconn keyspace-name))
 
-
 (defn casPutRandomTweets [casconn n]
   (if (pos? n)
     (do
@@ -159,6 +158,9 @@
                                    :sync false :id (UUID/randomUUID)
                                    :created_at (.getTime (java.util.Date.))})
       (recur casconn (dec n)))))
+
+(defn casCountTweets [casconn]
+  (count (cql/select casconn "tweet")))
 
 (defn casGetNotSyncTweets [casconn]
   (cql/select casconn "tweet" (casq/where {:sync false})))
