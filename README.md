@@ -10,6 +10,7 @@ Sistema que sincronize dados entre Cassandra e ElasticSearch
 * Lein - https://github.com/technomancy/leiningen
 * Cassandra (localhost)
 * Elastisearch (localhost)
+* Jsvc (para rodar programa como daemon. Esse utilitario esta nos repositorios do Ubuntu e Debian)
 
 Clone o programa do Github. 
 
