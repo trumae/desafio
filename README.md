@@ -44,7 +44,7 @@ $ ./stop.sh
 
 ## Testes
 
-Os testes unitarios para o sistema pode ser executado com:
+Os testes unitarios para o sistema podem ser executados com:
 ```sh
 $ lein test
 ```
